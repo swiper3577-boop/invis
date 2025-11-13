@@ -1,199 +1,73 @@
--- This script creates the GUI and implements the ghost functionality.
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Player = Players.LocalPlayer
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local realHRP = character:WaitForChild("HumanoidRootPart")
 
-if not Player then return end -- Failsafe if local player is not available
+-- State
+local isGhost = false
+local ghostHRP = nil
+local HIDDEN_OFFSET = Vector3.new(0, 1000000, 0)
+local GHOST_TRANSPARENCY = 0.5  -- translucent
 
--- Constants
-local GHOST_TRANSPARENCY = 0.6 
-local GHOST_COLOR = Color3.fromRGB(120, 180, 255) 
-local GHOST_MATERIAL = Enum.Material.Neon 
-local HIDDEN_CFRAME = CFrame.new(0, -10000, 0) -- Teleport spot
+-- Function to activate ghost
+local function activateGhost()
+    if isGhost then return end
+    isGhost = true
 
--- State Variables
-local isGhostActive = false
-local ghostClone = nil
-local renderSteppedConnection = nil
-local realCharacterHRP = nil 
-local originalWalkSpeed = 16
+    local originalPos = realHRP.Position
 
--- --- UI CREATION ---
-local PlayerGui = Player:WaitForChild("PlayerGui")
+    -- Move real HRP far away
+    player.Character:MoveTo(originalPos + HIDDEN_OFFSET)
+    wait(0.1)
 
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "GhostSystemGUI"
-ScreenGui.Parent = PlayerGui
+    -- Clone HRP for ghost
+    ghostHRP = realHRP:Clone()
+    wait(0.1)
 
-local Button = Instance.new("TextButton")
-Button.Name = "GhostToggle"
-Button.Size = UDim2.new(0, 200, 0, 50)
-Button.Position = UDim2.new(0.5, -100, 0.9, -50)
-Button.BackgroundColor3 = Color3.fromRGB(0, 102, 204) 
-Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-Button.Font = Enum.Font.SourceSansBold
-Button.TextSize = 22
-Button.BorderSizePixel = 0
-Button.Text = "Go Ghost Mode (Hide)"
-Button.Parent = ScreenGui
+    -- Destroy original HRP (local ghost replaces it)
+    realHRP:Destroy()
+    ghostHRP.Parent = character
+    ghostHRP.Name = "GhostHRP"
 
--- Use a UICorner object for rounded corners
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8) 
-corner.Parent = Button
+    -- Make ghost translucent
+    ghostHRP.Transparency = GHOST_TRANSPARENCY
 
--- UI Hover/Click Effects
-Button.MouseEnter:Connect(function()
-    Button:TweenSize(UDim2.new(0, 210, 0, 55), "Out", "Quad", 0.1, true)
-    Button:TweenPosition(UDim2.new(0.5, -105, 0.9, -52), "Out", "Quad", 0.1, true)
-end)
-
-Button.MouseLeave:Connect(function()
-    Button:TweenSize(UDim2.new(0, 200, 0, 50), "Out", "Quad", 0.1, true)
-    Button:TweenPosition(UDim2.new(0.5, -100, 0.9, -50), "Out", "Quad", 0.1, true)
-end)
-
--- --- GHOST LOGIC FUNCTIONS ---
-
--- Helper function to apply the ghost visuals to a model
-local function applyGhostVisuals(model)
-    for _, part in ipairs(model:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.Transparency = GHOST_TRANSPARENCY
-            part.CanCollide = false
-            part.Color = GHOST_COLOR
-            part.Material = GHOST_MATERIAL
-            part.CastShadow = false
-        elseif part:IsA("Decal") or part:IsA("Texture") or part:IsA("ShirtGraphic") then
-            part:Destroy()
-        end
-    end
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None 
-        humanoid.WalkSpeed = 40 
-    end
+    -- Move ghost to original position
+    player.Character:MoveTo(originalPos)
 end
 
--- Function to handle character movement synchronization
-local function syncClonePosition()
-    if realCharacterHRP and ghostClone and ghostClone:FindFirstChild("HumanoidRootPart") then
-        local cloneHRP = ghostClone.HumanoidRootPart
-        cloneHRP.CFrame = realCharacterHRP.CFrame
-    end
+-- Function to deactivate ghost
+local function deactivateGhost()
+    if not isGhost or not ghostHRP then return end
+
+    -- Create a new real HRP
+    local newHRP = Instance.new("Part")
+    newHRP.Size = Vector3.new(2,2,1)
+    newHRP.Name = "HumanoidRootPart"
+    newHRP.Anchored = false
+    newHRP.CanCollide = true
+    newHRP.CFrame = ghostHRP.CFrame
+    newHRP.Parent = character
+
+    -- Reconnect Humanoid
+    local newHumanoid = humanoid
+    newHumanoid.Parent = character
+
+    -- Remove ghost HRP
+    ghostHRP:Destroy()
+    ghostHRP = nil
+
+    isGhost = false
 end
 
-local function activateGhostMode()
-    local character = nil
-    
-    -- AGGRESSIVELY WAIT FOR CHARACTER MODEL TO BE READY IN WORKSPACE
-    repeat 
-        task.wait() 
-        -- Explicitly look for the character model by name in workspace
-        character = workspace:FindFirstChild(Player.Name) 
-    until character and character.Parent == workspace and character:FindFirstChild("Humanoid") and character:FindFirstChild("HumanoidRootPart")
-
-    -- Define core components now that we know they exist
-    local hrp = character.HumanoidRootPart
-    local humanoid = character.Humanoid
-
-    -- Store current state
-    realCharacterHRP = hrp
-    originalWalkSpeed = humanoid.WalkSpeed
-    
-    -- 1. Create the visual ghost clone (This is now much safer)
-    ghostClone = character:Clone()
-    
-    -- Check clone success
-    if not ghostClone then
-        warn("Critical Error: Character cloning failed after extensive waiting.")
-        return
-    end
-    
-    -- 2. Name the clone
-    ghostClone.Name = Player.Name .. "_GhostClone"
-    
-    -- 3. Apply ghost visuals
-    applyGhostVisuals(ghostClone)
-    
-    -- 4. Set the clone's starting position and parent it to the workspace
-    ghostClone.HumanoidRootPart.CFrame = hrp.CFrame
-    ghostClone.Parent = workspace
-    
-    -- 5. Set the real character's visibility to 1 (invisible locally)
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.LocalTransparencyModifier = 1 
-        end
-    end
-    
-    -- 6. TELEPORT THE REAL BODY FAR UNDERGROUND
-    hrp.CFrame = HIDDEN_CFRAME 
-
-    -- 7. Start the continuous synchronization loop
-    renderSteppedConnection = RunService.Heartbeat:Connect(syncClonePosition)
-
-    -- Update UI and state
-    isGhostActive = true
-    Button.Text = "Return to Body (Visible)"
-end
-
-local function deactivateGhostMode()
-    if not ghostClone or not realCharacterHRP then return end
-
-    -- 1. Stop the synchronization loop
-    if renderSteppedConnection then
-        renderSteppedConnection:Disconnect()
-        renderSteppedConnection = nil
-    end
-
-    -- 2. Get the final position of the ghost clone
-    local finalCFrame = ghostClone.HumanoidRootPart.CFrame
-    
-    -- 3. TELEPORT THE REAL BODY BACK TO THE GHOST'S POSITION
-    realCharacterHRP.CFrame = finalCFrame
-    
-    -- 4. Restore the real character's visibility (transparency 0)
-    local character = Player.Character
-    if character then
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.LocalTransparencyModifier = 0 
-            end
-        end
-        
-        -- Reset walkspeed
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = originalWalkSpeed 
-        end
-    end
-    
-    -- 5. Destroy the visual ghost clone
-    ghostClone:Destroy()
-    ghostClone = nil
-    realCharacterHRP = nil
-    
-    -- Update UI and state
-    isGhostActive = false
-    Button.Text = "Go Ghost Mode (Hide)"
-end
-
--- --- FINAL BINDING ---
-
--- Button Click Handler
-Button.MouseButton1Click:Connect(function()
-    if isGhostActive then
-        deactivateGhostMode()
-    else
-        -- Wrap activation in a pcall just for final protection
-        local success, err = pcall(activateGhostMode)
-        if not success then
-            warn("Error during Ghost Mode Activation: " .. tostring(err))
-            -- Attempt to clean up if activation failed midway
-            if ghostClone then ghostClone:Destroy() end
-            isGhostActive = false
-            Button.Text = "Go Ghost Mode (Hide)"
+-- Example toggle with a key (G)
+game:GetService("UserInputService").InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.G then
+        if isGhost then
+            deactivateGhost()
+        else
+            activateGhost()
         end
     end
 end)
