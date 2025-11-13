@@ -9,7 +9,7 @@ if not Player then return end -- Failsafe if local player is not available
 local GHOST_TRANSPARENCY = 0.6 
 local GHOST_COLOR = Color3.fromRGB(120, 180, 255) 
 local GHOST_MATERIAL = Enum.Material.Neon 
-local HIDDEN_CFRAME = CFrame.new(0, -10000, 0) 
+local HIDDEN_CFRAME = CFrame.new(0, -10000, 0) -- Teleport spot
 
 -- State Variables
 local isGhostActive = false
@@ -71,7 +71,7 @@ local function applyGhostVisuals(model)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     if humanoid then
         humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None 
-        humanoid.WalkSpeed = 40 -- Faster movement in ghost mode
+        humanoid.WalkSpeed = 40 
     end
 end
 
@@ -84,45 +84,33 @@ local function syncClonePosition()
 end
 
 local function activateGhostMode()
-    local character = Player.Character 
+    local character = nil
     
-    -- STEP 0: Wait for character to be fully parented and loaded (aggressive check)
-    if not character or not character.Parent then
-        -- Wait for a new character if the current one is nil/missing
-        character = Player.CharacterAdded:Wait() 
-    end
-    
-    -- Wait until the core components are definitely there
+    -- AGGRESSIVELY WAIT FOR CHARACTER MODEL TO BE READY IN WORKSPACE
     repeat 
         task.wait() 
-        character = Player.Character -- Re-assign in case of quick respawn
-    until character and character.Parent and character:FindFirstChild("Humanoid") and character:FindFirstChild("HumanoidRootPart")
+        -- Explicitly look for the character model by name in workspace
+        character = workspace:FindFirstChild(Player.Name) 
+    until character and character.Parent == workspace and character:FindFirstChild("Humanoid") and character:FindFirstChild("HumanoidRootPart")
 
     -- Define core components now that we know they exist
     local hrp = character.HumanoidRootPart
     local humanoid = character.Humanoid
 
-    -- Final Check before operations
-    if not hrp or not humanoid then 
-        warn("Character parts not ready after extensive wait. Aborting ghost mode activation.")
-        return 
-    end
-
     -- Store current state
     realCharacterHRP = hrp
     originalWalkSpeed = humanoid.WalkSpeed
     
-    -- 1. Create the visual ghost clone using pcall for maximum safety
-    local success, clonedModel = pcall(function() return character:Clone() end)
+    -- 1. Create the visual ghost clone (This is now much safer)
+    ghostClone = character:Clone()
     
-    if not success or not clonedModel then
-        warn("Failed to clone character model or cloning returned nil. Aborting.")
+    -- Check clone success
+    if not ghostClone then
+        warn("Critical Error: Character cloning failed after extensive waiting.")
         return
     end
-
-    ghostClone = clonedModel
     
-    -- 2. Name the clone (Safe now)
+    -- 2. Name the clone
     ghostClone.Name = Player.Name .. "_GhostClone"
     
     -- 3. Apply ghost visuals
@@ -135,7 +123,7 @@ local function activateGhostMode()
     -- 5. Set the real character's visibility to 1 (invisible locally)
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
-            part.LocalTransparencyModifier = 1 -- Locally hide the real body
+            part.LocalTransparencyModifier = 1 
         end
     end
     
@@ -198,7 +186,7 @@ Button.MouseButton1Click:Connect(function()
     if isGhostActive then
         deactivateGhostMode()
     else
-        -- Wrap activation in a pcall in case of a fatal error during the process
+        -- Wrap activation in a pcall just for final protection
         local success, err = pcall(activateGhostMode)
         if not success then
             warn("Error during Ghost Mode Activation: " .. tostring(err))
