@@ -400,7 +400,20 @@ SlidersTab:CreateSlider({
         end
     end
 })
+-- Assuming you have a 'Sliders' tab already
+SlidersTab:CreateSlider({
+    Name = "Max Parts",
+    Range = {1, 200},           -- Minimum 1 part, maximum 200
+    Increment = 1,              -- Step by 1
+    Suffix = "Parts",
+    CurrentValue = SETTINGS.MAX_PARTS,
+    Flag = "MaxPartsSlider",
+    Callback = function(Value)
+        SETTINGS.MAX_PARTS = Value
+    end,
+})
 
+-- Optionally, set the initial value if needed
 -- Orbit Modes Dropdown
 ModesTab:CreateDropdown({
     Name = "Orbit Mode",
