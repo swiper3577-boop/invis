@@ -1,10 +1,12 @@
---// Safe Orbit Controller v6 //--
--- Includes: launch, pull, orbit modes, long range pickup, respawn fix, spin-up, explode, shield, enemy orbit, vortex, save/load presets, force sliders, feature toggles
+--// Safe Orbit Controller v6 Rayfield GUI //--
+-- All features intact: orbit, launch, pull, spin-up, explode, shield, enemy orbit, vortex, presets, sliders, toggles
 
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local char = player.Character or player.CharacterAdded:Wait()
@@ -108,7 +110,7 @@ local function scan()
     if not SETTINGS.AUTO_ATTACH then return end
     local count = 0
     for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") and not obj.Anchored then
+        if obj:IsA("BasePart") and not obj.Anchored and not obj:IsDescendantOf(char) then
             attachPart(obj)
             count += 1
             if count >= SETTINGS.MAX_PARTS then break end
@@ -128,45 +130,25 @@ end)
 
 local function computeOrbitPosition(i, total)
     local t = tick() * SETTINGS.ORBIT_SPEED * spinMultiplier
-    local targetHRP = SETTINGS.ENEMY_ORBIT_ENABLED and SETTINGS.ENEMY_TARGET and SETTINGS.ENEMY_TARGET:FindFirstChild("HumanoidRootPart") or hrp
+    local targetHRP = (SETTINGS.ENEMY_ORBIT_ENABLED and SETTINGS.ENEMY_TARGET and SETTINGS.ENEMY_TARGET:FindFirstChild("HumanoidRootPart")) or hrp
     if not targetHRP then return Vector3.new() end
 
     if SETTINGS.ORBIT_MODE == "Ring" then
         local angle = (i / total) * math.pi * 2
-        return Vector3.new(
-            math.cos(t + angle) * SETTINGS.ORBIT_RADIUS,
-            SETTINGS.HEIGHT_OFFSET,
-            math.sin(t + angle) * SETTINGS.ORBIT_RADIUS
-        )
-
+        return Vector3.new(math.cos(t+angle)*SETTINGS.ORBIT_RADIUS, SETTINGS.HEIGHT_OFFSET, math.sin(t+angle)*SETTINGS.ORBIT_RADIUS)
     elseif SETTINGS.ORBIT_MODE == "Sphere" or SETTINGS.SHIELD_ENABLED then
-        local phi = math.acos(1 - 2 * (i / total))
-        local theta = math.sqrt(total * math.pi) * phi
-        return Vector3.new(
-            SETTINGS.ORBIT_RADIUS * math.sin(phi) * math.cos(theta),
-            SETTINGS.ORBIT_RADIUS * math.cos(phi),
-            SETTINGS.ORBIT_RADIUS * math.sin(phi) * math.sin(theta)
-        )
-
+        local phi = math.acos(1 - 2*(i/total))
+        local theta = math.sqrt(total*math.pi)*phi
+        return Vector3.new(SETTINGS.ORBIT_RADIUS*math.sin(phi)*math.cos(theta), SETTINGS.ORBIT_RADIUS*math.cos(phi), SETTINGS.ORBIT_RADIUS*math.sin(phi)*math.sin(theta))
     elseif SETTINGS.ORBIT_MODE == "Vertical" then
-        local angle = (i / total) * math.pi * 2
-        return Vector3.new(
-            math.cos(t + angle) * SETTINGS.ORBIT_RADIUS,
-            math.sin(t + angle) * SETTINGS.ORBIT_RADIUS,
-            0
-        )
-
+        local angle = (i/total)*math.pi*2
+        return Vector3.new(math.cos(t+angle)*SETTINGS.ORBIT_RADIUS, math.sin(t+angle)*SETTINGS.ORBIT_RADIUS, 0)
     elseif SETTINGS.ORBIT_MODE == "Cloud" then
-        return Vector3.new(
-            math.sin(t + i) * SETTINGS.ORBIT_RADIUS,
-            math.cos(t * 0.4 + i) * SETTINGS.ORBIT_RADIUS * 0.5,
-            math.cos(t + i * 0.3) * SETTINGS.ORBIT_RADIUS
-        )
-
+        return Vector3.new(math.sin(t+i)*SETTINGS.ORBIT_RADIUS, math.cos(t*0.4+i)*SETTINGS.ORBIT_RADIUS*0.5, math.cos(t+i*0.3)*SETTINGS.ORBIT_RADIUS)
     elseif SETTINGS.ORBIT_MODE == "Blackhole" or SETTINGS.BLACKHOLE_ENABLED then
         local dir = (targetHRP.Position - hrp.Position).Unit
-        local dist = (i / total) * SETTINGS.ORBIT_RADIUS
-        return dir * -dist + Vector3.new(0,math.sin(t+i)*5,0)
+        local dist = (i/total)*SETTINGS.ORBIT_RADIUS
+        return dir*-dist + Vector3.new(0, math.sin(t+i)*5, 0)
     end
 end
 
@@ -179,142 +161,89 @@ RunService.Heartbeat:Connect(function()
     end
 
     local live = {}
-    for part, data in pairs(tracked) do
+    for part,data in pairs(tracked) do
         if part.Parent and data.target and data.target.Parent then
-            table.insert(live, {part = part, data = data})
+            table.insert(live, {part=part,data=data})
         else
             cleanupPart(part)
         end
     end
 
     local total = #live
-    if total == 0 then return end
+    if total==0 then return end
 
     for i, rec in ipairs(live) do
-        local offset = computeOrbitPosition(i, total)
+        local offset = computeOrbitPosition(i,total)
         if rec.data.target then
-            local targetHRP = SETTINGS.ENEMY_ORBIT_ENABLED and SETTINGS.ENEMY_TARGET and SETTINGS.ENEMY_TARGET:FindFirstChild("HumanoidRootPart") or hrp
+            local targetHRP = (SETTINGS.ENEMY_ORBIT_ENABLED and SETTINGS.ENEMY_TARGET and SETTINGS.ENEMY_TARGET:FindFirstChild("HumanoidRootPart")) or hrp
             rec.data.target.CFrame = targetHRP.CFrame * CFrame.new(offset)
         end
     end
 end)
 
 ----------------------------------------------
--- GUI
+-- RAYFIELD GUI
 ----------------------------------------------
 
-local pg = player:WaitForChild("PlayerGui")
-local gui = Instance.new("ScreenGui", pg)
-gui.ResetOnSpawn = false
-gui.Name = "Orbit6"
+-- Load Rayfield
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-local toggle = Instance.new("TextButton", gui)
-toggle.Size = UDim2.new(0,150,0,40)
-toggle.Position = UDim2.new(0,10,0,10)
-toggle.Text = "Open Orbit"
-toggle.BackgroundColor3 = Color3.fromRGB(60,60,60)
-toggle.TextColor3 = Color3.new(1,1,1)
-toggle.TextScaled = true
+local Window = Rayfield:CreateWindow({
+    Name = "Safe Orbit Controller v6",
+    LoadingTitle = "Loading Orbit Controller...",
+    LoadingSubtitle = "by You",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "OrbitController",
+        FileName = "Settings"
+    },
+    Discord = {
+        Enabled = false
+    }
+})
 
-local frame = Instance.new("Frame", gui)
-frame.Size = UDim2.new(0,260,0,500)
-frame.Position = UDim2.new(0,50,0,60)
-frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-frame.Visible = false
-frame.Draggable = true
-frame.Active = true
+-- Tabs
+local MainTab = Window:CreateTab("Main")
+local TogglesTab = Window:CreateTab("Toggles")
+local SlidersTab = Window:CreateTab("Sliders")
+local PresetsTab = Window:CreateTab("Presets")
 
-toggle.MouseButton1Click:Connect(function()
-    frame.Visible = not frame.Visible
-    toggle.Text = frame.Visible and "Close Orbit" or "Open Orbit"
-end)
-
--- BUTTON CREATOR
-local function createButton(text,posY,color,callback)
-    local btn = Instance.new("TextButton", frame)
-    btn.Size = UDim2.new(1,-20,0,35)
-    btn.Position = UDim2.new(0,10,0,posY)
-    btn.Text = text
-    btn.TextScaled = true
-    btn.BackgroundColor3 = color
-    btn.MouseButton1Click:Connect(callback)
-end
-
--- SLIDER CREATOR
-local function createSlider(text,posY,min,max,default,callback)
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1,-20,0,25)
-    label.Position = UDim2.new(0,10,0,posY)
-    label.Text = text..": "..default
-    label.TextScaled = true
-    label.BackgroundColor3 = Color3.fromRGB(50,50,50)
-    
-    local slider = Instance.new("TextBox", frame)
-    slider.Size = UDim2.new(1,-20,0,25)
-    slider.Position = UDim2.new(0,10,0,posY+30)
-    slider.Text = tostring(default)
-    slider.TextScaled = true
-    slider.BackgroundColor3 = Color3.fromRGB(80,80,80)
-    slider.ClearTextOnFocus = false
-    
-    slider.FocusLost:Connect(function()
-        local val = tonumber(slider.Text)
-        if val then
-            callback(val)
-            label.Text = text..": "..val
-        end
-    end)
-end
-
--- LAUNCH OUT
-createButton("Launch Out",10,Color3.fromRGB(120,40,40),function()
+-- Buttons
+MainTab:CreateButton({Name="Launch Out", Callback=function()
     for part,data in pairs(tracked) do
         if part and data.alignP then
             data.alignP.Enabled = false
             data.alignO.Enabled = false
             local dir = (part.Position - hrp.Position).Unit
-            part.Velocity = dir * SETTINGS.LAUNCH_FORCE + Vector3.new(0,50,0)
+            part.Velocity = dir*SETTINGS.LAUNCH_FORCE + Vector3.new(0,50,0)
             task.delay(1.5,function()
-                if data.alignP then data.alignP.Enabled = true end
-                if data.alignO then data.alignO.Enabled = true end
+                if data.alignP then data.alignP.Enabled=true end
+                if data.alignO then data.alignO.Enabled=true end
             end)
         end
     end
-end)
+end})
 
--- PULL IN (fixed: only unanchored parts, excludes players)
-createButton("Pull In",60,Color3.fromRGB(40,120,40),function()
+MainTab:CreateButton({Name="Pull In", Callback=function()
     for part,data in pairs(tracked) do
-        if part and data.alignP then
-            -- Only pull in unanchored parts that are not descendants of any player
-            local isPlayerPart = false
-            for _, p in pairs(Players:GetPlayers()) do
-                if part:IsDescendantOf(p.Character) then
-                    isPlayerPart = true
-                    break
-                end
-            end
-            if not part.Anchored and not isPlayerPart then
-                data.alignP.Enabled = false
-                data.alignO.Enabled = false
-                local tween = TweenService:Create(part,TweenInfo.new(0.5,Enum.EasingStyle.Quad),{Position = hrp.Position + Vector3.new(0,2,0)})
-                tween:Play()
-                tween.Completed:Connect(function()
-                    if data.alignP then data.alignP.Enabled = true end
-                    if data.alignO then data.alignO.Enabled = true end
-                end)
-            end
+        if part and data.alignP and not part:IsDescendantOf(char) and not part:IsA("Player") and not part.Anchored then
+            data.alignP.Enabled=false
+            data.alignO.Enabled=false
+            local tween = TweenService:Create(part,TweenInfo.new(0.5,Enum.EasingStyle.Quad),{Position=hrp.Position+Vector3.new(0,2,0)})
+            tween:Play()
+            tween.Completed:Connect(function()
+                if data.alignP then data.alignP.Enabled=true end
+                if data.alignO then data.alignO.Enabled=true end
+            end)
         end
     end
-end)
+end})
 
--- SPIN UP
-createButton("Spin Up",110,Color3.fromRGB(120,120,40),function()
+MainTab:CreateButton({Name="Spin Up", Callback=function()
     spinMultiplier = spinMultiplier + 0.5
-end)
+end})
 
--- EXPLODE
-createButton("Explode",160,Color3.fromRGB(200,80,0),function()
+MainTab:CreateButton({Name="Explode", Callback=function()
     for part in pairs(tracked) do
         part.Velocity = Vector3.new(
             math.random(-SETTINGS.LAUNCH_FORCE,SETTINGS.LAUNCH_FORCE),
@@ -322,20 +251,19 @@ createButton("Explode",160,Color3.fromRGB(200,80,0),function()
             math.random(-SETTINGS.LAUNCH_FORCE,SETTINGS.LAUNCH_FORCE)
         )
     end
-end)
+end})
 
--- SHIELD TOGGLE
-createButton("Toggle Shield",210,Color3.fromRGB(40,160,160),function()
-    SETTINGS.SHIELD_ENABLED = not SETTINGS.SHIELD_ENABLED
-    SETTINGS.ORBIT_MODE = SETTINGS.SHIELD_ENABLED and "Sphere" or "Ring"
-end)
+-- Toggles
+TogglesTab:CreateToggle({Name="Shield",CurrentValue=SETTINGS.SHIELD_ENABLED,Flag="Shield",Callback=function(val)
+    SETTINGS.SHIELD_ENABLED = val
+    SETTINGS.ORBIT_MODE = val and "Sphere" or "Ring"
+end})
 
--- ENEMY ORBIT TOGGLE
-createButton("Orbit Enemy",260,Color3.fromRGB(160,40,160),function()
-    SETTINGS.ENEMY_ORBIT_ENABLED = not SETTINGS.ENEMY_ORBIT_ENABLED
-    if SETTINGS.ENEMY_ORBIT_ENABLED then
+TogglesTab:CreateToggle({Name="Enemy Orbit",CurrentValue=SETTINGS.ENEMY_ORBIT_ENABLED,Flag="EnemyOrbit",Callback=function(val)
+    SETTINGS.ENEMY_ORBIT_ENABLED = val
+    if val then
         for _,p in pairs(Players:GetPlayers()) do
-            if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            if p~=player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                 SETTINGS.ENEMY_TARGET = p
                 break
             end
@@ -343,56 +271,29 @@ createButton("Orbit Enemy",260,Color3.fromRGB(160,40,160),function()
     else
         SETTINGS.ENEMY_TARGET = nil
     end
-end)
+end})
 
--- BLACKHOLE TOGGLE
-createButton("Blackhole Vortex",310,Color3.fromRGB(0,0,0),function()
-    SETTINGS.BLACKHOLE_ENABLED = not SETTINGS.BLACKHOLE_ENABLED
-    SETTINGS.ORBIT_MODE = SETTINGS.BLACKHOLE_ENABLED and "Blackhole" or "Ring"
-end)
+TogglesTab:CreateToggle({Name="Blackhole",CurrentValue=SETTINGS.BLACKHOLE_ENABLED,Flag="Blackhole",Callback=function(val)
+    SETTINGS.BLACKHOLE_ENABLED = val
+    SETTINGS.ORBIT_MODE = val and "Blackhole" or "Ring"
+end})
 
--- ORBIT MODE SELECTOR
-local modeBtn = Instance.new("TextButton", frame)
-modeBtn.Size = UDim2.new(1,-20,0,35)
-modeBtn.Position = UDim2.new(0,10,0,360)
-modeBtn.Text = "Mode: Ring"
-modeBtn.TextScaled = true
-modeBtn.BackgroundColor3 = Color3.fromRGB(40,40,120)
+-- Sliders
+SlidersTab:CreateSlider({Name="Orbit Radius",Min=1,Max=50,Default=SETTINGS.ORBIT_RADIUS,DecimalPlaces=1,Callback=function(val) SETTINGS.ORBIT_RADIUS=val end})
+SlidersTab:CreateSlider({Name="Orbit Speed",Min=0.1,Max=10,Default=SETTINGS.ORBIT_SPEED,DecimalPlaces=1,Callback=function(val) SETTINGS.ORBIT_SPEED=val end})
+SlidersTab:CreateSlider({Name="Launch Force",Min=50,Max=500,Default=SETTINGS.LAUNCH_FORCE,DecimalPlaces=0,Callback=function(val) SETTINGS.LAUNCH_FORCE=val end})
+SlidersTab:CreateSlider({Name="Pull Force",Min=50,Max=500,Default=SETTINGS.PULL_FORCE,DecimalPlaces=0,Callback=function(val) SETTINGS.PULL_FORCE=val end})
 
-local modes = {"Ring","Sphere","Vertical","Cloud"}
-local modeIndex = 1
-modeBtn.MouseButton1Click:Connect(function()
-    modeIndex = modeIndex % #modes + 1
-    SETTINGS.ORBIT_MODE = modes[modeIndex]
-    modeBtn.Text = "Mode: "..SETTINGS.ORBIT_MODE
-end)
-
--- FORCE SLIDERS
-createSlider("Launch Force",410,50,500,SETTINGS.LAUNCH_FORCE,function(val)
-    SETTINGS.LAUNCH_FORCE = val
-end)
-
-createSlider("Pull Force",470,50,500,SETTINGS.PULL_FORCE,function(val)
-    SETTINGS.PULL_FORCE = val
-end)
-
--- SAVE / LOAD PRESETS
-local function savePreset()
+-- Presets
+PresetsTab:CreateButton({Name="Save Preset",Callback=function()
     local preset = {}
-    for k,v in pairs(SETTINGS) do
-        preset[k] = v
-    end
-    writefile("OrbitPreset.json", game:GetService("HttpService"):JSONEncode(preset))
-end
+    for k,v in pairs(SETTINGS) do preset[k]=v end
+    writefile("OrbitPreset.json",HttpService:JSONEncode(preset))
+end})
 
-local function loadPreset()
+PresetsTab:CreateButton({Name="Load Preset",Callback=function()
     if not isfile("OrbitPreset.json") then return end
     local json = readfile("OrbitPreset.json")
-    local preset = game:GetService("HttpService"):JSONDecode(json)
-    for k,v in pairs(preset) do
-        SETTINGS[k] = v
-    end
-end
-
-createButton("Save Preset",530,Color3.fromRGB(80,120,200),savePreset)
-createButton("Load Preset",570,Color3.fromRGB(80,200,120),loadPreset)
+    local preset = HttpService:JSONDecode(json)
+    for k,v in pairs(preset) do SETTINGS[k]=v end
+end})
