@@ -278,12 +278,63 @@ TogglesTab:CreateToggle({Name="Blackhole",CurrentValue=SETTINGS.BLACKHOLE_ENABLE
     SETTINGS.ORBIT_MODE = val and "Blackhole" or "Ring"
 end})
 
--- Sliders
-SlidersTab:CreateSlider({Name="Orbit Radius",Min=1,Max=50,Default=SETTINGS.ORBIT_RADIUS,DecimalPlaces=1,Callback=function(val) SETTINGS.ORBIT_RADIUS=val end})
-SlidersTab:CreateSlider({Name="Orbit Speed",Min=0.1,Max=10,Default=SETTINGS.ORBIT_SPEED,DecimalPlaces=1,Callback=function(val) SETTINGS.ORBIT_SPEED=val end})
-SlidersTab:CreateSlider({Name="Launch Force",Min=50,Max=500,Default=SETTINGS.LAUNCH_FORCE,DecimalPlaces=0,Callback=function(val) SETTINGS.LAUNCH_FORCE=val end})
-SlidersTab:CreateSlider({Name="Pull Force",Min=50,Max=500,Default=SETTINGS.PULL_FORCE,DecimalPlaces=0,Callback=function(val) SETTINGS.PULL_FORCE=val end})
+-- Create Sliders Tab
 
+-- Orbit Radius Slider
+local OrbitRadiusSlider = SlidersTab:CreateSlider({
+    Name = "Orbit Radius",
+    Range = {1, 50},
+    Increment = 1,
+    Suffix = "",
+    CurrentValue = SETTINGS.ORBIT_RADIUS,
+    Flag = "OrbitRadius",
+    Callback = function(Value)
+        SETTINGS.ORBIT_RADIUS = Value
+    end
+})
+OrbitRadiusSlider:Set(SETTINGS.ORBIT_RADIUS)
+
+-- Orbit Speed Slider
+local OrbitSpeedSlider = SlidersTab:CreateSlider({
+    Name = "Orbit Speed",
+    Range = {0.1, 10},
+    Increment = 0.1,
+    Suffix = "",
+    CurrentValue = SETTINGS.ORBIT_SPEED,
+    Flag = "OrbitSpeed",
+    Callback = function(Value)
+        SETTINGS.ORBIT_SPEED = Value
+    end
+})
+OrbitSpeedSlider:Set(SETTINGS.ORBIT_SPEED)
+
+-- Launch Force Slider
+local LaunchForceSlider = SlidersTab:CreateSlider({
+    Name = "Launch Force",
+    Range = {50, 500},
+    Increment = 5,
+    Suffix = "",
+    CurrentValue = SETTINGS.LAUNCH_FORCE,
+    Flag = "LaunchForce",
+    Callback = function(Value)
+        SETTINGS.LAUNCH_FORCE = Value
+    end
+})
+LaunchForceSlider:Set(SETTINGS.LAUNCH_FORCE)
+
+-- Pull Force Slider
+local PullForceSlider = SlidersTab:CreateSlider({
+    Name = "Pull Force",
+    Range = {50, 500},
+    Increment = 5,
+    Suffix = "",
+    CurrentValue = SETTINGS.PULL_FORCE,
+    Flag = "PullForce",
+    Callback = function(Value)
+        SETTINGS.PULL_FORCE = Value
+    end
+})
+PullForceSlider:Set(SETTINGS.PULL_FORCE)
 -- Presets
 PresetsTab:CreateButton({Name="Save Preset",Callback=function()
     local preset = {}
