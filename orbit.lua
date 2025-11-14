@@ -203,8 +203,16 @@ end)
 -- RAYFIELD GUI
 ----------------------------------------------
 
-local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-local Window = Rayfield:CreateWindow({
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+end)
+
+if not success or not Rayfield then
+    warn("Failed to load Rayfield GUI. Make sure HTTP requests are enabled.")
+    return
+    
+end
+   local Window = Rayfield:CreateWindow({
    Name = "Safe Orbit Controller v7",
    LoadingTitle = "Safe Orbit Controller",
    LoadingSubtitle = "v7 - Rayfield GUI",
